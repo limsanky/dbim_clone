@@ -79,3 +79,17 @@ bash scripts/evaluate.sh $DATASET_NAME $NFE $SAMPLER ($AUX)
 # Acknowledgement
 
 This codebase is built upon [DDBM](https://github.com/alexzhou907/DDBM) and [I2SB](https://github.com/NVlabs/I2SB).
+
+
+# Citation
+
+If you find this method and/or code useful, please consider citing
+
+```
+@article{zheng2024diffusion,
+  title={Diffusion Bridge Implicit Models},
+  author={Zheng, Kaiwen and He, Guande and Chen, Jianfei and Bao, Fan and Zhu, Jun},
+  journal={arXiv preprint arXiv:2405.15885},
+  year={2024}
+}
+```
