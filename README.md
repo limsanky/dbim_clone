@@ -75,3 +75,7 @@ The evaluation can automatically proceed by specifying the same dataset and samp
 ```
 bash scripts/evaluate.sh $DATASET_NAME $NFE $SAMPLER ($AUX)
 ```
+
+# Acknowledgement
+
+This codebase is built upon [DDBM](https://github.com/alexzhou907/DDBM) and [I2SB](https://github.com/NVlabs/I2SB).
