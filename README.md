@@ -6,7 +6,7 @@ Official Implementation of [Diffusion Bridge Implicit Models](https://arxiv.org/
   <img src="assets/teaser.png" width="100%"/>
 </p>
 
-DBIM provides offers a suite of fast samplers tailored for [Denoising Diffusion Bridge Models (DDBMs)](https://arxiv.org/abs/2309.16948). We clean the codebase to support a broad range of diffusion bridges, facilitating unified training and sampling workflows. We also streamline the deployment process by replacing the cumbersome MPI-based distributed launcher with the more efficient and engineer-friendly `torchrun`.
+DBIM offers a suite of fast samplers tailored for [Denoising Diffusion Bridge Models (DDBMs)](https://arxiv.org/abs/2309.16948). We clean the codebase to support a broad range of diffusion bridges, facilitating unified training and sampling workflows. We also streamline the deployment process by replacing the cumbersome MPI-based distributed launcher with the more efficient and engineer-friendly `torchrun`.
 
 
 # Dependencies
