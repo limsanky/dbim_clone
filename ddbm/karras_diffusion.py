@@ -11,6 +11,7 @@ import torch.distributed as dist
 
 
 from .nn import mean_flat, append_dims, append_zero
+from .random_util import BatchedSeedGenerator
 
 
 class NoiseSchedule:
@@ -249,6 +250,7 @@ def karras_sample(
     churn_step_ratio=0.0,
     eta=0.0,
     order=2,
+    seed=None,
 ):
     assert sampler in [
         "heun",
@@ -269,7 +271,7 @@ def karras_sample(
         "dbim_high_order": sample_dbim_high_order,
     }[sampler]
 
-    sampler_args = dict(churn_step_ratio=churn_step_ratio, mask=mask, eta=eta, x_0=x_0, order=order)
+    sampler_args = dict(churn_step_ratio=churn_step_ratio, mask=mask, eta=eta, x_0=x_0, order=order, seed=seed)
 
     def denoiser(x_t, sigma):
         _, denoised, _ = diffusion.denoise(model, x_t, sigma, **model_kwargs)
@@ -319,6 +321,7 @@ def sample_dbim_high_order(
     mask=None,
     order=2,
     lower_order_final=True,
+    seed=None,
     **kwargs,
 ):
     if order not in [2, 3]:
@@ -333,8 +336,8 @@ def sample_dbim_high_order(
 
     nfe = 0
     x0_hat = denoiser(x, diffusion.t_max * ones)
-    torch.manual_seed(42)
-    noise = torch.randn_like(x0_hat)
+    generator = BatchedSeedGenerator(seed)
+    noise = generator.randn_like(x0_hat)
     first_noise = noise
     if mask is not None:
         x0_hat = x0_hat * mask + x_T * (1 - mask)
@@ -451,6 +454,7 @@ def sample_dbim(
     ts,
     eta=1.0,
     mask=None,
+    seed=None,
     **kwargs,
 ):
     x_T = x
@@ -463,8 +467,8 @@ def sample_dbim(
 
     nfe = 0
     x0_hat = denoiser(x, diffusion.t_max * ones)
-    torch.manual_seed(42)
-    noise = torch.randn_like(x0_hat)
+    generator = BatchedSeedGenerator(seed)
+    noise = generator.randn_like(x0_hat)
     first_noise = noise
     if mask is not None:
         x0_hat = x0_hat * mask + x_T * (1 - mask)
@@ -495,7 +499,7 @@ def sample_dbim(
         coeff_x0_hat = b_t - tmp_var * b_s
         coeff_xT = a_t - tmp_var * a_s
 
-        noise = torch.randn_like(x0_hat)
+        noise = generator.randn_like(x0_hat)
 
         x = coeff_x0_hat * x0_hat + coeff_xT * x_T + coeff_xs * x + (1 if i != len(ts) - 2 else 0) * omega_st * noise
 

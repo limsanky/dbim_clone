@@ -96,6 +96,8 @@ def main():
             model_kwargs["y"] = label
         else:
             mask = None
+
+        indexes = data[2][0].numpy()
         sample, path, nfe, pred_x0, sigmas, _ = karras_sample(
             diffusion,
             model,
@@ -110,6 +112,7 @@ def main():
             churn_step_ratio=args.churn_step_ratio,
             eta=args.eta,
             order=args.order,
+            seed=indexes + args.seed,
         )
 
         sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
