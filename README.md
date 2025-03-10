@@ -1,36 +1,14 @@
-# Diffusion Bridge Implicit Models
+# Accelerating Diffusion Bridge Models for Image-to-Image Translation
 
-Official Implementation of [Diffusion Bridge Implicit Models](https://arxiv.org/abs/2405.15885). 
-
-<p align="center">
-  <img src="assets/teaser.png" width="100%"/>
-</p>
-
-DBIM offers a suite of fast samplers tailored for [Denoising Diffusion Bridge Models (DDBMs)](https://arxiv.org/abs/2309.16948). We clean the codebase to support a broad range of diffusion bridges, facilitating unified training and sampling workflows. We also streamline the deployment process by replacing the cumbersome MPI-based distributed launcher with the more efficient and engineer-friendly `torchrun`.
-
+Official Implementation of [Diffusion Bridge Implicit Models](https://arxiv.org/abs/2405.15885) (ICLR 2025) and [Consistency Diffusion Bridge Models](https://arxiv.org/abs/2410.22637) (NeurIPS 2024). 
 
 # Dependencies
 
 To install all packages in this codebase along with their dependencies, run
 ```sh
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install blobfile piq matplotlib opencv-python joblib lmdb scipy clean-fid easydict torchmetrics rich ipdb
+pip install blobfile piq matplotlib opencv-python joblib lmdb scipy clean-fid easydict torchmetrics rich ipdb wandb
 ```
-
-# Pre-trained models
-
-Please put the downloaded checkpoints under `assets/ckpts/`.
-
-For image translation, we directly adopt the pretrained checkpoints from [DDBM](https://github.com/alexzhou907/DDBM):
-
-- Edges2Handbags: [e2h_ema_0.9999_420000.pt](https://huggingface.co/alexzhou907/DDBM/resolve/main/e2h_ema_0.9999_420000.pt)
-- DIODE: [diode_ema_0.9999_440000.pt](https://huggingface.co/alexzhou907/DDBM/resolve/main/diode_ema_0.9999_440000.pt)
-
-We remove the dependency on external packages such as `flash_attn` in this codebase, which is already supported natively by PyTorch. After downloading the two checkpoints above, please run `python preprocess_ckpt.py` to complete the conversion.
-
-For image restoration:
-
-- Center 128x128 Inpainting on ImageNet 256x256: [imagenet256_inpaint_ema_0.9999_400000.pt](https://drive.google.com/file/d/1WozJyVOAFukj0nUYLS-ZUp1-QHuGNfox)
 
 # Datasets
 
@@ -50,7 +28,30 @@ bash download_extract_ImageNet.sh
 
 After downloading, the DIODE dataset requires preprocessing by running `python preprocess_depth.py`.
 
-# Sampling
+# Diffusion Bridge Implicit Models
+
+<p align="center">
+  <img src="assets/teaser.png" width="100%"/>
+</p>
+
+DBIM offers a suite of fast samplers tailored for [Denoising Diffusion Bridge Models (DDBMs)](https://arxiv.org/abs/2309.16948). We clean the codebase to support a broad range of diffusion bridges, facilitating unified training and sampling workflows. We also streamline the deployment process by replacing the cumbersome MPI-based distributed launcher with the more efficient and engineer-friendly `torchrun`.
+
+## Pre-trained models
+
+Please put the downloaded checkpoints under `assets/ckpts/`.
+
+For image translation, we directly adopt the pretrained checkpoints from [DDBM](https://github.com/alexzhou907/DDBM):
+
+- Edges2Handbags: [e2h_ema_0.9999_420000.pt](https://huggingface.co/alexzhou907/DDBM/resolve/main/e2h_ema_0.9999_420000.pt)
+- DIODE: [diode_ema_0.9999_440000.pt](https://huggingface.co/alexzhou907/DDBM/resolve/main/diode_ema_0.9999_440000.pt)
+
+We remove the dependency on external packages such as `flash_attn` in this codebase, which is already supported natively by PyTorch. After downloading the two checkpoints above, please run `python preprocess_ckpt.py` to complete the conversion.
+
+For image restoration:
+
+- Center 128x128 Inpainting on ImageNet 256x256: [imagenet256_inpaint_ema_0.9999_400000.pt](https://drive.google.com/file/d/1WozJyVOAFukj0nUYLS-ZUp1-QHuGNfox)
+
+## Sampling
 
 ```
 bash scripts/sample.sh $DATASET_NAME $NFE $SAMPLER ($AUX)
@@ -64,7 +65,7 @@ bash scripts/sample.sh $DATASET_NAME $NFE $SAMPLER ($AUX)
 
 The samples will be saved to `workdir/`.
 
-# Evaluations
+## Evaluations
 
 Before evaluating the image translation results, please download the reference statistics from DDBM and put them under `assets/stats/`:
 - Reference stats for Edge2Handbags: [edges2handbags_ref_64_data.npz](https://huggingface.co/alexzhou907/DDBM/resolve/main/edges2handbags_ref_64_data.npz).
@@ -75,6 +76,21 @@ The evaluation can automatically proceed by specifying the same dataset and samp
 ```
 bash scripts/evaluate.sh $DATASET_NAME $NFE $SAMPLER ($AUX)
 ```
+
+## Training
+
+We provide the script for training diffusion bridge models on the ImageNet 256x256 inpainting (center 128x128) task. As ImageNet 256x256 is a challenging dataset, we follow [I2SB](https://github.com/NVlabs/I2SB) and initialize the network with a pretrained diffusion model [ADM](https://github.com/openai/guided-diffusion/). To start training, run
+
+```
+python download_diffusion.py
+bash scripts/train_bridge.sh
+```
+
+Training for 400k iterations takes around 2 weeks on 8xA100. We recommend using multiple nodes and modifying `scripts/train_bridge.sh` accordingly.
+
+# Consistency Diffusion Bridge Models
+
+TODO
 
 # Acknowledgement
 
@@ -90,6 +106,17 @@ If you find this method and/or code useful, please consider citing
   title={Diffusion Bridge Implicit Models},
   author={Zheng, Kaiwen and He, Guande and Chen, Jianfei and Bao, Fan and Zhu, Jun},
   journal={arXiv preprint arXiv:2405.15885},
+  year={2024}
+}
+```
+
+and
+
+```
+@article{he2024consistency,
+  title={Consistency Diffusion Bridge Models},
+  author={He, Guande and Zheng, Kaiwen and Chen, Jianfei and Bao, Fan and Zhu, Jun},
+  journal={arXiv preprint arXiv:2410.22637},
   year={2024}
 }
 ```

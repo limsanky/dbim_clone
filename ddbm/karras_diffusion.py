@@ -6,7 +6,6 @@ import numpy as np
 import torch
 from piq import LPIPS
 from tqdm.auto import tqdm
-from functools import partial
 import torch.distributed as dist
 
 
