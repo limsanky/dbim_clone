@@ -111,8 +111,8 @@ def readlines(fn):
 
 def build_lmdb_dataset_val10k(dataset_dir, image_size, transform=None):
     fn = os.path.join(dataset_dir, "val")
-    fn_10k = readlines("assets/datasets/val_faster_imagefolder_10k_fn.txt")
-    label_10k = readlines("assets/datasets/val_faster_imagefolder_10k_label.txt")
+    fn_10k = readlines("/root/data/imagenet/assets/val_faster_imagefolder_10k_fn.txt")
+    label_10k = readlines("/root/data/imagenet/assets/val_faster_imagefolder_10k_label.txt")
 
     if transform is None:
         transform = build_test_transform(image_size)

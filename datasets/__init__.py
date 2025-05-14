@@ -224,7 +224,19 @@ def load_data(
 
         if include_test:
             testset = InpaintingVal10kSubset(root, image_size, corrupt_type)
+    
+    elif dataset.startswith('f2c'):
+        
+        from .aligned_dataset import F2CDataset
+        trainset = F2CDataset(dataroot=root, train=True, img_size=image_size,
+                                    random_crop=False, random_flip=True)
 
+        valset = F2CDataset(dataroot=root, train=True, img_size=image_size,
+                                    random_crop=False, random_flip=False)
+        if include_test:
+            testset = F2CDataset(dataroot=root, train=True, img_size=image_size,
+                                    random_crop=False, random_flip=False)
+            
     loader = DataLoader(
         dataset=trainset,
         num_workers=num_workers,

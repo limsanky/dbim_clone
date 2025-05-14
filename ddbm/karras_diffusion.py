@@ -80,6 +80,9 @@ class VENoiseSchedule(NoiseSchedule):
         alpha_bar_t = alpha_t / self.alpha_T
         rho_t = self.rho_fn(t)
         rho_bar_t = (self.rho_T**2 - rho_t**2).sqrt()
+        # assert (alpha_t > 0).all(), f"{t.unique()}"
+        # assert (rho_t > 0).all(), f"{t.unique()}"
+        # assert (rho_bar_t > 0).all(), f"{t.unique()}"
         return alpha_t, alpha_bar_t, rho_t, rho_bar_t
 
 
@@ -251,12 +254,15 @@ def karras_sample(
     order=2,
     seed=None,
 ):
+    assert not x_0 is None 
     assert sampler in [
         "heun",
         "ground_truth",
         "dbim",
         "dbim_high_order",
-    ], "only these sampler is supported currently"
+        "dbmsolver",
+        "dbmsolver2",
+    ], "Only these samplers are supported currently."
 
     if sampler == "heun":
         ts = get_sigmas_karras(steps, diffusion.t_min, diffusion.t_max - 1e-4, rho, device=device)
@@ -268,9 +274,11 @@ def karras_sample(
         "ground_truth": sample_ground_truth,
         "dbim": sample_dbim,
         "dbim_high_order": sample_dbim_high_order,
+        "dbmsolver": sample_dbmsolver,
+        "dbmsolver2": sample_dbmsolver2,
     }[sampler]
 
-    sampler_args = dict(churn_step_ratio=churn_step_ratio, mask=mask, eta=eta, x_0=x_0, order=order, seed=seed)
+    sampler_args = dict(churn_step_ratio=churn_step_ratio, mask=mask, eta=eta, x0=x_0, order=order, seed=seed)
 
     def denoiser(x_t, sigma):
         _, denoised, _ = diffusion.denoise(model, x_t, sigma, **model_kwargs)
@@ -444,6 +452,290 @@ def sample_dbim_high_order(
 
     return x, path, nfe, pred_x0, ts, first_noise
 
+@torch.no_grad()
+def sample_dbmsolver(
+    denoiser,
+    diffusion,
+    x,
+    ts,
+    mask=None,
+    **kwargs,
+):
+    """Implements Algorithm 2 (Heun steps) from Karras et al. (2022)."""
+    x_T = x
+    # x_T = x.clone()
+    path = [x.detach().clone().cpu()]
+    pred_x0 = []
+    
+    s_in = x.new_ones([x.shape[0]])
+    indices = range(len(ts) - 1)
+    from tqdm.auto import tqdm
+    indices = tqdm(indices)
+
+    nfe = 0
+
+    def new_2diffexpm1(l_first, l_second) -> torch.Tensor:
+        return torch.expm1(2 * (l_first - l_second))
+        # return th.exp(2 * l_first - 2 * l_second) - 1
+    
+    for _, i in enumerate(indices):
+        
+        if i == 0:
+            # 1 step euler
+            s = ts[i]
+            t = ts[i + 1]
+            
+            alpha_s, _, rho_s, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(s * s_in)]
+            alpha_t, _, rho_t, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(t * s_in)]
+            
+            sigma_s = alpha_s * rho_s
+            sigma_t = alpha_t * rho_t
+            
+            lambda_s = -torch.log(rho_s)
+            lambda_t = -torch.log(rho_t)
+            
+            h = lambda_t - lambda_s
+            
+            denoised = denoiser(x, s * s_in)
+            assert not torch.any(denoised.isnan())
+            
+            if mask is not None:
+                denoised = denoised * mask + x_T * (1 - mask)
+
+            x = (sigma_t / sigma_s) * (-h).exp() * x - alpha_t * (-2 * h).expm1() * denoised
+            assert not torch.any(x.isnan())
+            
+            x = x + sigma_t * (- (-2 * h).expm1()).sqrt() * torch.randn_like(x)
+            assert not torch.any(x.isnan())
+            
+            nfe += 1
+            
+            # print('SDE: going from', s.unique().item(), 'to', t.unique().item(), "| i =", i)
+            pred_x0.append(denoised.detach().cpu())
+            continue
+        else:
+            s = ts[i]
+        
+        t = ts[i + 1]
+        denoised = denoiser(x, s * s_in)
+        if mask is not None:
+            denoised = denoised * mask + x_T * (1 - mask)
+        nfe += 1
+        
+        if torch.all(t == 0):
+            x = denoised
+        else:
+            # print('ODE:', s.unique().item(), "->", t.unique().item())
+            
+            alpha_s, alpha_bar_s, rho_s, rho_bar_s = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(s * s_in)]
+            alpha_t, _, rho_t, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(t * s_in)]
+            
+            # alpha_T = alpha_s / alpha_bar_s
+            # rho_T = torch.sqrt(rho_bar_s.square() + rho_s.square())
+            alpha_T = diffusion.noise_schedule.alpha_T
+            rho_T = diffusion.noise_schedule.rho_T
+            # print("alpha_T:", alpha_T)
+            # print("rho_T:", rho_T)
+            # exit()
+            sigma_s = alpha_s * rho_s
+            sigma_t = alpha_t * rho_t
+            
+            lambda_s = -torch.log(rho_s)
+            lambda_t = -torch.log(rho_t)
+            lambda_T = -torch.log(rho_T)
+            
+            _error_msg = f"{s.unique().item()} -> {t.unique().item()}"
+            
+            first = x * sigma_t / sigma_s
+            assert not first.isnan().any(), _error_msg
+            
+            first = first * torch.sqrt(new_2diffexpm1(lambda_t, lambda_T) / new_2diffexpm1(lambda_s, lambda_T))
+            assert not first.isnan().any(), _error_msg
+            
+            first = first * torch.exp(lambda_s - lambda_t)
+            assert not first.isnan().any(), _error_msg
+    
+            second_a = denoised * sigma_t * torch.exp((2 * lambda_T) - lambda_t)
+            assert not second_a.isnan().any(), _error_msg
+            
+            second_b = new_2diffexpm1(lambda_t, lambda_T)
+            assert not second_b.isnan().any(), _error_msg
+            
+            second_c = 1.0 - torch.sqrt(new_2diffexpm1(lambda_s, lambda_T) / new_2diffexpm1(lambda_t, lambda_T))
+            assert not second_c.isnan().any(), _error_msg
+            
+            second = second_a * second_b * second_c
+            assert not second.isnan().any(), _error_msg
+    
+            third_a = x_T / alpha_T
+            assert not third_a.isnan().any(), _error_msg
+            
+            third_b = sigma_t * torch.exp((2 * lambda_T) - lambda_t)
+            assert not third_b.isnan().any(), _error_msg
+            
+            third_c = 1.0 - torch.sqrt(new_2diffexpm1(lambda_t, lambda_T) / new_2diffexpm1(lambda_s, lambda_T))
+            assert not third_c.isnan().any(), f"{_error_msg} | second_a[nan]: {third_a[third_a.isnan().any()]}"
+            
+            third = third_a * third_b * third_c
+            assert not third.isnan().any(), _error_msg
+            
+            x = first + second + third
+            # print('ODE 1:', sigma_hat.unique().item(), "->", sigma_next.unique().item())
+            assert not x.isnan().any(), _error_msg
+
+        path.append(x.detach().cpu())
+        pred_x0.append(denoised.detach().cpu())
+    
+    return x, path, nfe, pred_x0, ts, None
+
+@torch.no_grad()
+def sample_dbmsolver2(
+    denoiser,
+    diffusion,
+    x,
+    ts,
+    mask=None,
+    **kwargs,
+):
+    """Implements Algorithm 2 (Heun steps) from Karras et al. (2022)."""
+    x_T = x
+    # x_T = x.clone()
+    path = [x.detach().clone().cpu()]
+    pred_x0 = []
+    
+    s_in = x.new_ones([x.shape[0]])
+    indices = range(len(ts) - 1)
+    from tqdm.auto import tqdm
+    indices = tqdm(indices)
+
+    nfe = 0
+    
+    denoised = denoiser(x, diffusion.t_max * s_in)
+    assert not torch.isnan(denoised).any()
+
+    noise = torch.randn_like(x)
+    first_noise = noise
+    if mask is not None:
+        denoised = denoised * mask + x_T * (1 - mask)
+    
+    x = diffusion.bridge_sample(denoised, x_T, ts[0] * s_in, noise)
+    path.append(x.detach().cpu())
+    pred_x0.append(denoised.detach().cpu())
+    nfe += 1
+
+    def new_2diffexpm1(l_first, l_second) -> torch.Tensor:
+        return torch.expm1(2 * (l_first - l_second))
+        # return th.exp(2 * l_first - 2 * l_second) - 1
+    
+    for _, i in enumerate(indices):
+        
+        if i == 0:
+            # 1 step euler
+            s = ts[i]
+            t = ts[i + 1]
+            
+            alpha_s, _, rho_s, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(s * s_in)]
+            alpha_t, _, rho_t, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(t * s_in)]
+            
+            sigma_s = alpha_s * rho_s
+            sigma_t = alpha_t * rho_t
+            
+            lambda_s = -torch.log(rho_s)
+            lambda_t = -torch.log(rho_t)
+            
+            h = lambda_t - lambda_s
+            
+            denoised = denoiser(x, s * s_in)
+            assert not torch.any(denoised.isnan())
+            
+            if mask is not None:
+                denoised = denoised * mask + x_T * (1 - mask)
+
+            x = (sigma_t / sigma_s) * (-h).exp() * x - alpha_t * (-2 * h).expm1() * denoised
+            assert not torch.any(x.isnan())
+            
+            x = x + sigma_t * (- (-2 * h).expm1()).sqrt() * torch.randn_like(x)
+            assert not torch.any(x.isnan())
+            
+            nfe += 1
+            
+            # print('SDE: going from', s.unique().item(), 'to', t.unique().item(), "| i =", i)
+            pred_x0.append(denoised.detach().cpu())
+            continue
+        else:
+            s = ts[i]
+        
+        t = ts[i + 1]
+        denoised = denoiser(x, s * s_in)
+        if mask is not None:
+            denoised = denoised * mask + x_T * (1 - mask)
+        nfe += 1
+        
+        if torch.all(t == 0):
+            x = denoised
+        else:
+            # print('ODE:', s.unique().item(), "->", t.unique().item())
+            
+            alpha_s, alpha_bar_s, rho_s, rho_bar_s = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(s * s_in)]
+            alpha_t, _, rho_t, _ = [append_dims(item, x.ndim) for item in diffusion.noise_schedule.get_alpha_rho(t * s_in)]
+            
+            # alpha_T = alpha_s / alpha_bar_s
+            # rho_T = torch.sqrt(rho_bar_s.square() + rho_s.square())
+            alpha_T = diffusion.noise_schedule.alpha_T
+            rho_T = diffusion.noise_schedule.rho_T
+            # print("alpha_T:", alpha_T)
+            # print("rho_T:", rho_T)
+            # exit()
+            sigma_s = alpha_s * rho_s
+            sigma_t = alpha_t * rho_t
+            
+            lambda_s = -torch.log(rho_s)
+            lambda_t = -torch.log(rho_t)
+            lambda_T = -torch.log(rho_T)
+            
+            _error_msg = f"{s.unique().item()} -> {t.unique().item()}"
+            
+            first = x * sigma_t / sigma_s
+            assert not first.isnan().any(), _error_msg
+            
+            first = first * torch.sqrt(new_2diffexpm1(lambda_t, lambda_T) / new_2diffexpm1(lambda_s, lambda_T))
+            assert not first.isnan().any(), _error_msg
+            
+            first = first * torch.exp(lambda_s - lambda_t)
+            assert not first.isnan().any(), _error_msg
+    
+            second_a = denoised * sigma_t * torch.exp((2 * lambda_T) - lambda_t)
+            assert not second_a.isnan().any(), _error_msg
+            
+            second_b = new_2diffexpm1(lambda_t, lambda_T)
+            assert not second_b.isnan().any(), _error_msg
+            
+            second_c = 1.0 - torch.sqrt(new_2diffexpm1(lambda_s, lambda_T) / new_2diffexpm1(lambda_t, lambda_T))
+            assert not second_c.isnan().any(), _error_msg
+            
+            second = second_a * second_b * second_c
+            assert not second.isnan().any(), _error_msg
+    
+            third_a = x_T / alpha_T
+            assert not third_a.isnan().any(), _error_msg
+            
+            third_b = sigma_t * torch.exp((2 * lambda_T) - lambda_t)
+            assert not third_b.isnan().any(), _error_msg
+            
+            third_c = 1.0 - torch.sqrt(new_2diffexpm1(lambda_t, lambda_T) / new_2diffexpm1(lambda_s, lambda_T))
+            assert not third_c.isnan().any(), f"{_error_msg} | second_a[nan]: {third_a[third_a.isnan().any()]}"
+            
+            third = third_a * third_b * third_c
+            assert not third.isnan().any(), _error_msg
+            
+            x = first + second + third
+            # print('ODE 1:', sigma_hat.unique().item(), "->", sigma_next.unique().item())
+            assert not x.isnan().any(), _error_msg
+
+        path.append(x.detach().cpu())
+        pred_x0.append(denoised.detach().cpu())
+    
+    return x, path, nfe, pred_x0, ts, first_noise
 
 @torch.no_grad()
 def sample_dbim(
@@ -466,8 +758,12 @@ def sample_dbim(
 
     nfe = 0
     x0_hat = denoiser(x, diffusion.t_max * ones)
-    generator = BatchedSeedGenerator(seed)
-    noise = generator.randn_like(x0_hat)
+    assert not torch.isnan(x0_hat).any()
+    if seed is None:
+        noise = torch.randn_like(x)
+    else:
+        generator = BatchedSeedGenerator(seed)
+        noise = generator.randn_like(x)
     first_noise = noise
     if mask is not None:
         x0_hat = x0_hat * mask + x_T * (1 - mask)
@@ -475,33 +771,63 @@ def sample_dbim(
     path.append(x.detach().cpu())
     pred_x0.append(x0_hat.detach().cpu())
     nfe += 1
+    
+    # assert mask is None
+    # assert x is not None
 
     for _, i in enumerate(indices):
         s = ts[i]
         t = ts[i + 1]
+        # print("s:", s.unique().item(), "--> t:", t.unique().item())
 
+        assert not torch.isnan(x).any()
         x0_hat = denoiser(x, s * ones)
+        assert not torch.isnan(x0_hat).any()
+        
         if mask is not None:
             x0_hat = x0_hat * mask + x_T * (1 - mask)
 
         a_s, b_s, c_s = [append_dims(item, x0_hat.ndim) for item in diffusion.noise_schedule.get_abc(s * ones)]
         a_t, b_t, c_t = [append_dims(item, x0_hat.ndim) for item in diffusion.noise_schedule.get_abc(t * ones)]
-
+        
         _, _, rho_s, _ = [append_dims(item, x0_hat.ndim) for item in diffusion.noise_schedule.get_alpha_rho(s * ones)]
         alpha_t, _, rho_t, _ = [
             append_dims(item, x0_hat.ndim) for item in diffusion.noise_schedule.get_alpha_rho(t * ones)
         ]
+        
+        if c_s.unique().item() == 0:
+            # print('yes')
+            omega_st = eta * (alpha_t * rho_t) * (1 - rho_t**2 / rho_s**2).sqrt()
+            coeff_xT = a_t
+            coeff_x0_hat = b_t
+            coeff_xs = 0
+        else:
+            omega_st = eta * (alpha_t * rho_t) * (1 - rho_t**2 / rho_s**2).sqrt()
+            tmp_var = (c_t**2 - omega_st**2).sqrt() / c_s
+            # assert (c_s != 0).all()
+            coeff_xs = tmp_var
+            coeff_x0_hat = b_t - tmp_var * b_s
+            coeff_xT = a_t - tmp_var * a_s
 
-        omega_st = eta * (alpha_t * rho_t) * (1 - rho_t**2 / rho_s**2).sqrt()
-        tmp_var = (c_t**2 - omega_st**2).sqrt() / c_s
-        coeff_xs = tmp_var
-        coeff_x0_hat = b_t - tmp_var * b_s
-        coeff_xT = a_t - tmp_var * a_s
+        if seed is None:
+            noise = torch.randn_like(x0_hat)
+        else:
+            noise = generator.randn_like(x0_hat)
 
-        noise = generator.randn_like(x0_hat)
-
-        x = coeff_x0_hat * x0_hat + coeff_xT * x_T + coeff_xs * x + (1 if i != len(ts) - 2 else 0) * omega_st * noise
-
+        assert not torch.isnan(coeff_x0_hat).any(), f"s: {s.unique().item()} --> t: {t.unique().item()}"
+        # x = coeff_x0_hat * x0_hat + coeff_xT * x_T + coeff_xs * x + (1 if i != len(ts) - 2 else 0) * omega_st * noise
+        first = coeff_x0_hat * x0_hat 
+        assert not torch.isnan(first).any()
+        second = coeff_xT * x_T 
+        assert not torch.isnan(second).any()
+        third = coeff_xs * x 
+        assert not torch.isnan(third).any()
+        fourth = (1 if i != len(ts) - 2 else 0) * omega_st * noise
+        assert not torch.isnan(fourth).any()
+        
+        x = first + second + third + fourth
+        assert not torch.isnan(x).any()
+        
         path.append(x.detach().cpu())
         pred_x0.append(x0_hat.detach().cpu())
         nfe += 1

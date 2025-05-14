@@ -12,12 +12,12 @@ if [[ $DATASET_NAME == "e2h" ]]; then
 elif [[ $DATASET_NAME == "diode" ]]; then
     SPLIT=train
     PREFIX=diode_ema_0.9999_440000_adapted/sample_440000
-    REF_PATH=assets/stats/diode_ref_256_data.npz
+    REF_PATH=/root/code/ddbm_org/samplings/diode/diode_ref_256_data.npz
     SAMPLE_NAME=samples_16502x256x256x3_nfe${NFE}.npz
 elif [[ $DATASET_NAME == "imagenet_inpaint_center" ]]; then
     SPLIT=test
     PREFIX=imagenet256_inpaint_ema_0.9999_400000/sample_400000
-    DATA_DIR=assets/datasets/ImageNet
+    DATA_DIR=/root/data/imagenet/
     SAMPLE_NAME=samples_10000x256x256x3_nfe${NFE}.npz
     LABEL_NAME=labels_10000_nfe${NFE}.npz
 fi
@@ -34,6 +34,12 @@ elif [[ $GEN_SAMPLER == "dbim_high_order" ]]; then
     N=$((NFE-1))
     ORDER=$4
     SAMPLER="dbim_order=${ORDER}"
+elif [[ $GEN_SAMPLER == "dbmsolver" ]]; then
+    N=$((NFE))
+    SAMPLER="dbmsolver"
+elif [[ $GEN_SAMPLER == "dbmsolver2" ]]; then
+    N=$((NFE-1))
+    SAMPLER="dbmsolver2"
 fi
 
 # For example:
@@ -41,7 +47,7 @@ fi
 # SAMPLE_PATH="workdir/diode_ema_0.9999_440000_adapted/sample_440000/split=train/dbim_eta=0.0/steps=4/samples_16502x256x256x3_nfe5.npz"
 # SAMPLE_PATH="workdir/imagenet256_inpaint_ema_0.9999_400000/sample_400000/split=test/dbim_order=3/steps=9/samples_10000x256x256x3_nfe10.npz"
 
-SAMPLE_DIR=workdir/${PREFIX}/split=${SPLIT}/${SAMPLER}/steps=${N}
+SAMPLE_DIR=/root/code/dbim_clone/workdir/${PREFIX}/split=${SPLIT}/${SAMPLER}/steps=${N}
 SAMPLE_PATH=${SAMPLE_DIR}/${SAMPLE_NAME}
 
 if [[ $DATASET_NAME == "e2h" || $DATASET_NAME == "diode" ]]; then
@@ -50,5 +56,5 @@ if [[ $DATASET_NAME == "e2h" || $DATASET_NAME == "diode" ]]; then
 elif [[ $DATASET_NAME == "imagenet_inpaint_center" ]]; then
     LABEL_PATH=${SAMPLE_DIR}/${LABEL_NAME}
     python evaluation/compute_metrices_imagenet.py --ckpt $SAMPLE_PATH --label $LABEL_PATH --dataset-dir $DATA_DIR
-    python evaluations/evaluator.py "" $SAMPLE_PATH --metric is
+    # python evaluations/evaluator.py "" $SAMPLE_PATH --metric is
 fi

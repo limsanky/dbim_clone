@@ -8,7 +8,8 @@ from .karras_diffusion import (
     DDBMPreCond,
     I2SBPreCond,
 )
-from .unet import UNetModel
+# from .unet import UNetModel
+from .unet_imagenet import UNetModel
 
 NUM_CLASSES = 1000
 
@@ -156,6 +157,9 @@ def create_model(
     use_new_attention_order=False,
     condition_mode=None,
 ):
+    
+    assert unet_type in ["cbm_unet", "adm", "cbm_unet_sizeS"], unet_type
+    
     if channel_mult == "":
         if image_size == 512:
             channel_mult = (0.5, 1, 1, 2, 2, 4, 4)
@@ -195,6 +199,126 @@ def create_model(
             use_scale_shift_norm=use_scale_shift_norm,
             resblock_updown=resblock_updown,
             use_new_attention_order=use_new_attention_order,
+            condition_mode=condition_mode,
+        )
+    elif unet_type == "cbm_unet":
+        
+        assert condition_mode == 'concat'
+       
+        if image_size == 256:
+            channel_mult = (1, 1, 1, 1, 2, 2)
+            assert attention_resolutions == "16,32"
+        elif image_size == 128:
+            channel_mult = (1, 1, 2, 2, 3)
+            assert attention_resolutions == "8,16"
+        elif image_size == 64:
+            channel_mult = (1, 2, 2, 4)
+            assert attention_resolutions == "4,8"
+        elif image_size == 32:
+            channel_mult = (1, 2, 4)
+            assert attention_resolutions == "2,4"
+        else:
+            raise ValueError(f"unsupported image size: {image_size}")
+    
+        attention_ds = []
+        for res in attention_resolutions.split(","):
+            attention_ds.append(image_size // int(res))
+        
+        return UNetModel(
+            image_size=image_size,
+            in_channels=in_channels,
+            model_channels=num_channels,
+            out_channels=in_channels,
+            num_res_blocks=num_res_blocks,
+            attention_resolutions=tuple(attention_ds),
+            dropout=dropout,
+            channel_mult=channel_mult,
+            num_classes=(NUM_CLASSES if class_cond else None),
+            use_checkpoint=use_checkpoint,
+            use_fp16=use_fp16,
+            num_heads=num_heads,
+            num_head_channels=num_head_channels,
+            num_heads_upsample=num_heads_upsample,
+            use_scale_shift_norm=use_scale_shift_norm,
+            resblock_updown=resblock_updown,
+            use_new_attention_order=use_new_attention_order,
+            condition_mode=condition_mode,
+        )
+    elif unet_type == 'cbm_unet_sizeS':
+        assert condition_mode == 'concat'
+        attention_type='flash'
+       
+        # if image_size == 256:
+        #     channel_mult = (1, 1, 1, 1, 1.5)
+        #     assert attention_resolutions == "16,32"
+        # else:
+        #     raise ValueError(f"unsupported image size: {image_size}")
+        if image_size == 256:
+            channel_mult = (1, 1, 1, 1, 2)
+            assert attention_resolutions == "16,32"
+        else:
+            raise ValueError(f"unsupported image size: {image_size}")
+    
+        attention_ds = []
+        for res in attention_resolutions.split(","):
+            attention_ds.append(image_size // int(res))
+        
+        # print('\nnum_channels =', num_channels, '\n')
+        return UNetModel(
+            image_size=image_size,
+            in_channels=in_channels,
+            model_channels=num_channels,
+            out_channels=in_channels,
+            num_res_blocks=num_res_blocks,
+            attention_resolutions=tuple(attention_ds),
+            dropout=dropout,
+            channel_mult=channel_mult,
+            num_classes=(NUM_CLASSES if class_cond else None),
+            use_checkpoint=use_checkpoint,
+            use_fp16=use_fp16,
+            num_heads=num_heads,
+            num_head_channels=num_head_channels,
+            num_heads_upsample=num_heads_upsample,
+            use_scale_shift_norm=use_scale_shift_norm,
+            resblock_updown=resblock_updown,
+            use_new_attention_order=use_new_attention_order,
+            attention_type=attention_type,
+            condition_mode=condition_mode,
+        )
+    elif unet_type == 'cbm_unet_sizeM':
+        assert condition_mode == 'concat'
+        attention_type='flash'
+       
+        if image_size == 256:
+            channel_mult = (1, 1, 1, 1, 2)
+            assert attention_resolutions == "16,32"
+        else:
+            raise ValueError(f"unsupported image size: {image_size}")
+    
+        attention_ds = []
+        for res in attention_resolutions.split(","):
+            attention_ds.append(image_size // int(res))
+        
+        # print('\nnum_channels =', num_channels, '\n')
+        return UNetModel(
+            image_size=image_size,
+            in_channels=in_channels,
+            model_channels=num_channels,
+            out_channels=in_channels,
+            num_res_blocks=num_res_blocks,
+            attention_resolutions=tuple(attention_ds),
+            dropout=dropout,
+            channel_mult=channel_mult,
+            num_classes=(NUM_CLASSES if class_cond else None),
+            use_checkpoint=use_checkpoint,
+            use_fp16=use_fp16,
+            num_heads=num_heads,
+            num_head_channels=num_head_channels,
+            num_heads_upsample=num_heads_upsample,
+            use_scale_shift_norm=use_scale_shift_norm,
+            resblock_updown=resblock_updown,
+            use_new_attention_order=use_new_attention_order,
+            attention_type=attention_type,
             condition_mode=condition_mode,
         )
     else:

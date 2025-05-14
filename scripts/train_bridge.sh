@@ -1,14 +1,14 @@
 export PYTHONPATH=$PYTHONPATH:./
 
-DATASET_NAME=imagenet_inpaint_center
-TRAIN_MODE=ddbm
+DATASET_NAME=f2c64
+TRAIN_MODE=i2sb
 
 source scripts/args.sh $DATASET_NAME
 
 FREQ_SAVE_ITER=5000
 EXP=${DATASET_NAME}-${TRAIN_MODE}
 
-CKPT=assets/ckpts/256x256_diffusion_fixedsigma.pt
+# CKPT=assets/ckpts/256x256_diffusion_fixedsigma.pt
 
 # For cluster
 # export ADDR=$1
@@ -18,11 +18,16 @@ CKPT=assets/ckpts/256x256_diffusion_fixedsigma.pt
 #           --master_port $MASTER_PORT \
 #           --nnodes $WORLD_SIZE"
 # For local
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-run_args="--nproc_per_node 8 \
+# export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+# run_args="--nproc_per_node 8 \
+#           --master_port 29511"
+export CUDA_VISIBLE_DEVICES="4,5,6,7"
+run_args="--nproc_per_node 4 \
           --master_port 29511"
 
-MICRO_BS=4
+MICRO_BS=64
+
+PRED="i2sb_cond"
 
 torchrun $run_args train.py --exp=$EXP \
  --class_cond $CLASS_COND  \

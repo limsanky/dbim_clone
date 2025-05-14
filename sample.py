@@ -5,7 +5,7 @@ numpy array. This can be used to produce samples for FID evaluation.
 
 import argparse
 import os
-
+import time 
 import numpy as np
 import torch
 import torchvision.utils as vutils
@@ -27,9 +27,12 @@ from pathlib import Path
 
 def main():
     args = create_argparser().parse_args()
-    args.use_fp16 = False
+    # args.use_fp16 
 
-    workdir = os.path.join("workdir", os.path.basename(args.model_path)[:-3])
+    workdir = os.path.join("/root/code/dbim_clone/workdir", os.path.basename(args.model_path)[:-3])
+    
+    # print('args.steps:', args.steps)
+    # exit()
 
     ## assume ema ckpt format: ema_{rate}_{steps}.pt
     split = args.model_path.replace("_adapted", "").split("_")
@@ -54,7 +57,8 @@ def main():
     model = model.to(dist_util.dev())
 
     if args.use_fp16:
-        model = model.half()
+        # model = model.half()
+        model.convert_to_fp16()
     model.eval()
 
     logger.log("sampling...")
@@ -79,13 +83,19 @@ def main():
         raise NotImplementedError
     args.num_samples = len(dataloader.dataset)
     num = 0
+    start_time = time.time()
     for i, data in enumerate(dataloader):
 
         x0_image = data[0]
         x0 = x0_image.to(dist_util.dev())
+        
 
         y0_image = data[1].to(dist_util.dev())
         y0 = y0_image
+        
+        if args.use_fp16:
+            x0 = x0.half()
+            y0 = y0.half()
 
         model_kwargs = {"xT": y0}
 
@@ -97,7 +107,13 @@ def main():
         else:
             mask = None
 
-        indexes = data[2][0].numpy()
+        if "f2c" in args.dataset:
+            indexes = np.array([0])
+            seed = None
+        else:
+            indexes = data[2][0].numpy()
+            seed = indexes + args.seed
+        assert x0 is not None
         sample, path, nfe, pred_x0, sigmas, _ = karras_sample(
             diffusion,
             model,
@@ -112,7 +128,7 @@ def main():
             churn_step_ratio=args.churn_step_ratio,
             eta=args.eta,
             order=args.order,
-            seed=indexes + args.seed,
+            seed=seed,
         )
 
         sample = ((sample + 1) * 127.5).clamp(0, 255).to(torch.uint8)
@@ -128,7 +144,7 @@ def main():
             gathered_labels = torch.cat(gathered_labels)
         num += gathered_samples.shape[0]
 
-        num_display = min(32, sample.shape[0])
+        num_display = min(16, sample.shape[0])
         if i == 0 and dist.get_rank() == 0:
             vutils.save_image(
                 sample.permute(0, 3, 1, 2)[:num_display].float() / 255,
@@ -147,12 +163,16 @@ def main():
                 nrow=int(np.sqrt(num_display)),
             )
 
-        all_images.append(gathered_samples.detach().cpu().numpy())
+        all_images.append(gathered_samples.to(torch.uint8).detach().cpu().numpy())
         if "inpaint" in args.dataset:
             all_labels.append(gathered_labels.detach().cpu().numpy())
 
         if dist.get_rank() == 0:
             logger.log(f"sampled {num} images")
+    
+    end_time = time.time()
+    total_size = len(dataloader.dataset)
+    logger.log("Rate:", total_size / (end_time - start_time), "img/s.")
 
     logger.log(f"created {len(all_images) * args.batch_size * dist.get_world_size()} samples")
 

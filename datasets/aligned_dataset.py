@@ -230,3 +230,63 @@ class DIODE(torch.utils.data.Dataset):
             return len(self.cache["img"])
         else:
             return len(self.filenames)
+
+class F2CDataset(torch.utils.data.Dataset):
+    """A dataset class for paired face2comics dataset.
+    It assumes that the directory '/path/to/data/comics' and '/path/to/data/faces' respectively each contain the images.
+    """
+
+    def __init__(self, dataroot, train=True, img_size=256, random_crop=False, random_flip=True):
+        """Initialize this dataset class.
+        Parameters:
+            opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
+        """
+        super().__init__()
+        print('Dataset Directory:', os.path.join(dataroot, 'train'))
+        
+        self.faces_dir = os.path.join(dataroot, 'faces')  # get the image directory
+        self.faces_paths = make_dataset(self.faces_dir) # get image paths
+        self.faces_paths = sorted(self.faces_paths)
+        
+        self.comics_dir = os.path.join(dataroot, 'comics')  # get the image directory
+        self.comics_paths = make_dataset(self.comics_dir) # get image paths
+        self.comics_paths = sorted(self.comics_paths)
+        
+        self.crop_size = img_size
+        self.resize_size = img_size
+        
+        self.random_crop = random_crop
+        self.random_flip = random_flip
+        self.train = train
+
+
+    def __getitem__(self, index):
+        """Return a data point and its metadata information.
+        Parameters:
+            index - - a random integer for data indexing
+        Returns a dictionary that contains A, B, A_paths and B_paths
+            A (tensor) - - an image in the input domain
+            B (tensor) - - its corresponding image in the target domain
+            A_paths (str) - - image paths
+            B_paths (str) - - image paths (same as A_paths)
+        """
+        # read a image given a random integer index
+
+        faces_paths = self.faces_paths[index]
+        comics_paths = self.comics_paths[index]
+        face_img = Image.open(faces_paths).convert('RGB')
+        comic_img = Image.open(comics_paths).convert('RGB')
+
+        # apply the same transform to both A and B
+        params =  get_params(face_img.size, self.resize_size, self.crop_size)
+
+        transform_image = get_transform( params, self.resize_size, self.crop_size, crop =self.random_crop, flip=self.random_flip)
+
+        face_img = transform_image(face_img)
+        comic_img = transform_image(comic_img)
+
+        return comic_img, face_img, index
+
+    def __len__(self):
+        """Return the total number of images in the dataset."""
+        return len(self.faces_paths)
