@@ -29,7 +29,7 @@ def main():
     args = create_argparser().parse_args()
     # args.use_fp16 
 
-    workdir = os.path.join("/root/code/dbim_clone/workdir", os.path.basename(args.model_path)[:-3])
+    workdir = os.path.join("/root/code/dbim_clone/samplings", os.path.basename(args.model_path)[:-3])
     
     # print('args.steps:', args.steps)
     # exit()

@@ -3,6 +3,7 @@ import functools
 import os
 
 import numpy as np
+import datetime
 
 import blobfile as bf
 import torch
@@ -186,6 +187,7 @@ class TrainLoop:
                     logs = logger.dumpkvs()
 
                     if dist.get_rank() == 0:
+                        logger.log(datetime.datetime.now().strftime("Time: %Y-%m-%d %H-%M-%S"))
                         wandb.log(logs, step=self.step)
 
                 if took_step and self.step % self.save_interval == 0:
@@ -321,7 +323,7 @@ class TrainLoop:
                     filename = f"ema_{rate}_{(self.step):06d}.pt"
                 if for_preemption:
                     filename = f"freq_{filename}"
-                    maybe_delete_earliest(filename)
+                    # maybe_delete_earliest(filename)
 
                 with bf.BlobFile(bf.join(get_blob_logdir(), filename), "wb") as f:
                     torch.save(state_dict, f)
@@ -333,7 +335,7 @@ class TrainLoop:
             filename = f"opt_{(self.step):06d}.pt"
             if for_preemption:
                 filename = f"freq_{filename}"
-                maybe_delete_earliest(filename)
+                # maybe_delete_earliest(filename)
 
             with bf.BlobFile(
                 bf.join(get_blob_logdir(), filename),
@@ -392,6 +394,6 @@ def log_loss_dict(diffusion, ts, losses):
     for key, values in losses.items():
         logger.logkv_mean(key, values.mean().item())
         # Log the quantiles (four quartiles, in particular).
-        for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
-            quartile = int(4 * sub_t)
-            logger.logkv_mean(f"{key}_q{quartile}", sub_loss)
+        # for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
+        #     quartile = int(4 * sub_t)
+        #     logger.logkv_mean(f"{key}_q{quartile}", sub_loss)

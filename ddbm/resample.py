@@ -21,4 +21,7 @@ class RealUniformSampler:
 
     def sample(self, batch_size, device):
         ts = torch.rand(batch_size).to(device) * (self.t_max - self.t_min) + self.t_min
+        # print(f"ts: {ts}")
+        # print(self.t_max, self.t_min)
+        # exit()
         return ts, torch.ones_like(ts)

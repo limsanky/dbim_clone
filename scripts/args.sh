@@ -64,12 +64,12 @@ elif [[ $DATASET_NAME == "f2c64" ]]; then
     UNET=cbm_unet
 
     EXP="f2c${IMG_SIZE}_${NUM_CH}d"
-    SAVE_ITER=20000
+    SAVE_ITER=2000
     MICRO_BS=64
     DROPOUT=0.1
     CLASS_COND=False
 
-    PRED="ve"
+    # PRED="ve"
 elif [[ $DATASET_NAME == "f2c128" ]]; then
     DATA_DIR=/root/data/face2comics/resized_128/
     DATASET=f2c
@@ -87,7 +87,7 @@ elif [[ $DATASET_NAME == "f2c128" ]]; then
     DROPOUT=0.1
     CLASS_COND=False
 
-    PRED="ve"
+    # PRED="ve"
 elif [[ $DATASET_NAME == "f2c256" ]]; then
     DATA_DIR=/root/data/face2comics/
     DATASET=f2c
@@ -105,7 +105,7 @@ elif [[ $DATASET_NAME == "f2c256" ]]; then
     DROPOUT=0.1
     CLASS_COND=False
 
-    PRED="ve"
+    # PRED="ve"
 fi
     
 if  [[ $PRED == "ve" ]]; then

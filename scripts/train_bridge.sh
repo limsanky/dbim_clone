@@ -2,6 +2,7 @@ export PYTHONPATH=$PYTHONPATH:./
 
 DATASET_NAME=f2c64
 TRAIN_MODE=i2sb
+PRED="i2sb_cond"
 
 source scripts/args.sh $DATASET_NAME
 
@@ -18,20 +19,22 @@ EXP=${DATASET_NAME}-${TRAIN_MODE}
 #           --master_port $MASTER_PORT \
 #           --nnodes $WORLD_SIZE"
 # For local
-# export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-# run_args="--nproc_per_node 8 \
-#           --master_port 29511"
-export CUDA_VISIBLE_DEVICES="4,5,6,7"
-run_args="--nproc_per_node 4 \
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+run_args="--nproc_per_node 8 \
           --master_port 29511"
+# export CUDA_VISIBLE_DEVICES=0
+# run_args="--nproc_per_node 1 \
+#           --master_port 29511"
+# export CUDA_VISIBLE_DEVICES="4,5,6,7"
+# run_args="--nproc_per_node 4 \
+#           --master_port 29511"
 
+BS=64
 MICRO_BS=64
 
-PRED="i2sb_cond"
-
-torchrun $run_args train.py --exp=$EXP \
+CUDA_LAUNCH_BLOCKING=1 torchrun $run_args train.py --exp=$EXP \
  --class_cond $CLASS_COND  \
- --dropout $DROPOUT  --microbatch $MICRO_BS \
+ --dropout $DROPOUT  --microbatch $MICRO_BS --batch_size $BS \
  --image_size $IMG_SIZE  --num_channels $NUM_CH  \
  --num_res_blocks $NUM_RES_BLOCKS  --condition_mode=$COND  \
  --noise_schedule=$PRED    \

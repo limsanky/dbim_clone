@@ -51,10 +51,10 @@ SAMPLE_DIR=/root/code/dbim_clone/workdir/${PREFIX}/split=${SPLIT}/${SAMPLER}/ste
 SAMPLE_PATH=${SAMPLE_DIR}/${SAMPLE_NAME}
 
 if [[ $DATASET_NAME == "e2h" || $DATASET_NAME == "diode" ]]; then
-    python evaluations/evaluator.py $REF_PATH $SAMPLE_PATH --metric fid
+    CUDA_VISIBLE_DEVICES=4 python evaluations/evaluator.py $REF_PATH $SAMPLE_PATH --metric fid
     python evaluations/evaluator.py $REF_PATH $SAMPLE_PATH --metric lpips
 elif [[ $DATASET_NAME == "imagenet_inpaint_center" ]]; then
     LABEL_PATH=${SAMPLE_DIR}/${LABEL_NAME}
-    python evaluation/compute_metrices_imagenet.py --ckpt $SAMPLE_PATH --label $LABEL_PATH --dataset-dir $DATA_DIR
+    CUDA_VISIBLE_DEVICES=4 python evaluation/compute_metrices_imagenet.py --ckpt $SAMPLE_PATH --label $LABEL_PATH --dataset-dir $DATA_DIR
     # python evaluations/evaluator.py "" $SAMPLE_PATH --metric is
 fi

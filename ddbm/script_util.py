@@ -8,8 +8,8 @@ from .karras_diffusion import (
     DDBMPreCond,
     I2SBPreCond,
 )
-# from .unet import UNetModel
-from .unet_imagenet import UNetModel
+from .unet import UNetModel
+# from .unet_imagenet import UNetModel
 
 NUM_CLASSES = 1000
 
@@ -98,6 +98,15 @@ def create_model_and_diffusion(
     cov_xy=0.0,
     unet_type="adm",
 ):
+    # print('num_res_blocks', num_res_blocks)
+    # print('num_channels', num_channels)
+    # print('image_size', image_size)
+    # print('in_channels', in_channels)
+    # print('class_cond', class_cond)
+    # print('num_heads', num_heads)
+    # print('unet_type', unet_type)
+    # print('attention_resolutions', attention_resolutions)
+    # exit()
     model = create_model(
         image_size,
         in_channels,
